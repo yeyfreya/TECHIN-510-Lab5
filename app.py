@@ -79,4 +79,4 @@ for idx, row in df.iterrows():
             [row['latitude'], row['longitude']],
             popup=f"{row['title']}: {row['venue']}",
         ).add_to(m)
-st_folium(m, width=700, height=500)
+st_folium(m, width=700, height=500) 

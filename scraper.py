@@ -101,7 +101,7 @@ def insert_to_pg():
         longitude NUMERIC(10, 7),
         weather_condition TEXT,
         temperature INTEGER,
-        wind_chill INTEGER
+        wind_chill INTEGER 
     );
     '''
     conn = get_db_conn()
