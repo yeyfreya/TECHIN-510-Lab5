@@ -1,3 +1,4 @@
+import os
 import re
 import json
 import datetime
@@ -20,6 +21,10 @@ def list_links():
         res = requests.get(URL + str(page_no) + '/')
         links.extend(re.findall(r'<h3 class="event-title"><a href="(https://visitseattle.org/events/.+?/)" title=".+?">.+?</a></h3>', res.text))
 
+    # Ensure the directory exists before writing to the file
+    if not os.path.exists(os.path.dirname(URL_LIST_FILE)):
+        os.makedirs(os.path.dirname(URL_LIST_FILE))
+    
     json.dump(links, open(URL_LIST_FILE, 'w'))
 
 def get_geolocation(location_name):

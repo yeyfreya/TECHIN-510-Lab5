@@ -17,3 +17,8 @@ def get_db_conn():
     conn = psycopg2.connect(conn_str)
     conn.autocommit = True
     return conn
+
+# print if it is connected
+
+conn = get_db_conn()
+print(conn)
