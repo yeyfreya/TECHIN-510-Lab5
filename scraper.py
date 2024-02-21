@@ -17,7 +17,7 @@ def list_links():
     last_page_no = int(re.findall(r'bpn-last-page-link"><a href=".+?/page/(\d+?)/.+" title="Navigate to last page">', res.text)[0])
 
     links = []
-    for page_no in range(1, last_page_no + 1):
+    for page_no in range(1, 2):
         res = requests.get(URL + str(page_no) + '/')
         links.extend(re.findall(r'<h3 class="event-title"><a href="(https://visitseattle.org/events/.+?/)" title=".+?">.+?</a></h3>', res.text))
 
@@ -52,7 +52,7 @@ def get_weather_details(lat, lon):
     return {
         'condition': forecast_today['shortForecast'],
         'temperature': forecast_today['temperature'],
-        'windChill': forecast_today.get('windChill', None)  # Some responses might not include wind chill
+        'windSpeed': forecast_today.get('windSpeed', None)  # Some responses might not include wind chill
     }
 
 def get_detail_page():
@@ -101,7 +101,7 @@ def insert_to_pg():
         longitude NUMERIC(10, 7),
         weather_condition TEXT,
         temperature INTEGER,
-        wind_chill INTEGER 
+        windSpeed INTEGER 
     );
     '''
     conn = get_db_conn()
@@ -112,8 +112,8 @@ def insert_to_pg():
     data = json.load(open(URL_DETAIL_FILE, 'r'))
     for url, row in zip(urls, data):
         q = '''
-        INSERT INTO events (url, title, date, venue, category, location, latitude, longitude, weather_condition, temperature, wind_chill)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO events (url, title, date, venue, category, location, latitude, longitude, weather_condition, temperature)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (url) DO NOTHING;
         '''
         cur.execute(q, (
@@ -127,7 +127,7 @@ def insert_to_pg():
             row['geolocation']['longitude'] if row.get('geolocation') else None, 
             row['weather']['condition'] if row.get('weather') else None, 
             row['weather']['temperature'] if row.get('weather') else None, 
-            row['weather'].get('windChill')  # Some responses might not include wind chill
+            #row['weather'].get('windSpeed')  # Some responses might not include wind chill
         ))
     conn.commit()  # Commit the transaction
     cur.close()
@@ -138,3 +138,4 @@ if __name__ == '__main__':
     list_links()
     get_detail_page()
     insert_to_pg()
+    print("Data inserted successfully!")
