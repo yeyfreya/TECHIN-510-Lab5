@@ -21,7 +21,7 @@ def list_links():
     last_page_no = int(re.findall(r'bpn-last-page-link"><a href=".+?/page/(\d+?)/.+" title="Navigate to last page">', res.text)[0])
 
     links = []
-    for page_no in range(1, 2):
+    for page_no in range(1, last_page_no + 1):
         res = requests.get(URL + str(page_no) + '/')
         links.extend(re.findall(r'<h3 class="event-title"><a href="(https://visitseattle.org/events/.+?/)" title=".+?">.+?</a></h3>', res.text))
 
