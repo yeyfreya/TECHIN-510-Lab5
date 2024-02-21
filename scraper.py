@@ -12,6 +12,10 @@ URL = 'https://visitseattle.org/events/page/'
 URL_LIST_FILE = './data/links.json'
 URL_DETAIL_FILE = './data/data.json'
 
+# Default Seattle coordinates
+SEATTLE_LAT = '47.6062'
+SEATTLE_LON = '-122.3321'
+
 def list_links():
     res = requests.get(URL + '1/')
     last_page_no = int(re.findall(r'bpn-last-page-link"><a href=".+?/page/(\d+?)/.+" title="Navigate to last page">', res.text)[0])
@@ -21,7 +25,6 @@ def list_links():
         res = requests.get(URL + str(page_no) + '/')
         links.extend(re.findall(r'<h3 class="event-title"><a href="(https://visitseattle.org/events/.+?/)" title=".+?">.+?</a></h3>', res.text))
 
-    # Ensure the directory exists before writing to the file
     if not os.path.exists(os.path.dirname(URL_LIST_FILE)):
         os.makedirs(os.path.dirname(URL_LIST_FILE))
     
@@ -35,11 +38,12 @@ def get_geolocation(location_name):
     if location_data:
         return {'latitude': location_data[0]['lat'], 'longitude': location_data[0]['lon']}
     else:
-        return {'latitude': None, 'longitude': None}
+        # Return default Seattle coordinates if geolocation fails
+        return {'latitude': SEATTLE_LAT, 'longitude': SEATTLE_LON}
 
 def get_weather_details(lat, lon):
-    if lat is None or lon is None:  # Skip if lat or lon is missing
-        return None
+    if lat is None or lon is None:
+        lat, lon = SEATTLE_LAT, SEATTLE_LON  # Use Seattle's coordinates if any are None
     weather_url = f"https://api.weather.gov/points/{lat},{lon}"
     weather_res = requests.get(weather_url)
     weather_data = weather_res.json()
@@ -47,12 +51,11 @@ def get_weather_details(lat, lon):
     forecast_res = requests.get(forecast_url)
     forecast_data = forecast_res.json()
 
-    # Extracting only the first period (today's forecast)
     forecast_today = forecast_data['properties']['periods'][0]
     return {
         'condition': forecast_today['shortForecast'],
         'temperature': forecast_today['temperature'],
-        'windSpeed': forecast_today.get('windSpeed', None)  # Some responses might not include wind chill
+        'windSpeed': forecast_today.get('windSpeed', None)
     }
 
 def get_detail_page():
@@ -65,25 +68,22 @@ def get_detail_page():
             row['title'] = html.unescape(re.findall(r'<h1 class="page-title" itemprop="headline">(.+?)</h1>', res.text)[0])
             datetime_venue = re.findall(r'<h4><span>.*?(\d{1,2}/\d{1,2}/\d{4})</span> \| <span>(.+?)</span></h4>', res.text)[0]
             row['date'] = datetime.datetime.strptime(datetime_venue[0], '%m/%d/%Y').replace(tzinfo=ZoneInfo('America/Los_Angeles')).isoformat()
-            row['venue'] = datetime_venue[1].strip()  # remove leading/trailing whitespaces
+            row['venue'] = datetime_venue[1].strip()
             metas = re.findall(r'<a href=".+?" class="button big medium black category">(.+?)</a>', res.text)
             row['category'] = html.unescape(metas[0])
             row['location'] = metas[1]
             
-            # Geolocation
             geolocation = get_geolocation(row['venue'] + ', ' + row['location'] + ', Seattle')
             row['geolocation'] = geolocation
             
-            # Weather details
-            if geolocation['latitude'] and geolocation['longitude']:
-                weather_details = get_weather_details(geolocation['latitude'], geolocation['longitude'])
-                row['weather'] = weather_details
+            weather_details = get_weather_details(geolocation['latitude'], geolocation['longitude'])
+            row['weather'] = weather_details
             
             data.append(row)
         except IndexError as e:
             print(f'Error: {e}')
             print(f'Link: {link}')
-        except KeyError as e:  # Handle potential KeyError for missing weather forecast URL
+        except KeyError as e:
             print(f'Weather API KeyError: {e}')
             print(f'Link: {link}')
     json.dump(data, open(URL_DETAIL_FILE, 'w'))
@@ -101,7 +101,7 @@ def insert_to_pg():
         longitude NUMERIC(10, 7),
         weather_condition TEXT,
         temperature INTEGER,
-        windSpeed INTEGER 
+        windSpeed TEXT 
     );
     '''
     conn = get_db_conn()
@@ -110,10 +110,18 @@ def insert_to_pg():
     
     urls = json.load(open(URL_LIST_FILE, 'r'))
     data = json.load(open(URL_DETAIL_FILE, 'r'))
+
+
+
     for url, row in zip(urls, data):
+        weather = row.get('weather', {})
+        weather_condition = weather.get('condition', None)
+        temperature = weather.get('temperature', None)
+        wind_speed = weather.get('windSpeed', None)
+
         q = '''
-        INSERT INTO events (url, title, date, venue, category, location, latitude, longitude, weather_condition, temperature)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO events (url, title, date, venue, category, location, latitude, longitude, weather_condition, temperature, windSpeed)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (url) DO NOTHING;
         '''
         cur.execute(q, (
@@ -123,16 +131,16 @@ def insert_to_pg():
             row['venue'], 
             row['category'], 
             row['location'],
-            row['geolocation']['latitude'] if row.get('geolocation') else None, 
-            row['geolocation']['longitude'] if row.get('geolocation') else None, 
-            row['weather']['condition'] if row.get('weather') else None, 
-            row['weather']['temperature'] if row.get('weather') else None, 
-            #row['weather'].get('windSpeed')  # Some responses might not include wind chill
+            row.get('geolocation', {}).get('latitude', None), 
+            row.get('geolocation', {}).get('longitude', None), 
+            weather_condition, 
+            temperature, 
+            wind_speed 
         ))
-    conn.commit()  # Commit the transaction
+
+    conn.commit()
     cur.close()
     conn.close()
-
 
 if __name__ == '__main__':
     list_links()
